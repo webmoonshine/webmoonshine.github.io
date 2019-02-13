@@ -1,0 +1,237 @@
+<html>
+<body>
+
+<table width="40%" frame="box" align="center">
+  <tr><th colspan="2"> Инфо</th></tr>
+  
+  <tr>
+    <td>Статус соединения</td>
+    <td align="right" id="connectionStatus"></td>
+  </tr>
+  <tr>
+    <td>Отбор за 1 секунду</td>
+    <td align="right" id="speedSave"></td>
+  </tr>
+
+    <tr><th colspan="2" id="manualRunStatus">Отбор</th></tr>
+  
+  <tr>
+    <td>Скорость отбора</td>
+    <td align="right" id="manualrunSpeedInfo"></td>
+  </tr>
+
+  <tr>
+    <td>Температура колонны</td>
+    <td align="right" id="currentColumnTemp"></td>
+  </tr>
+
+  <tr>
+    <td id="stabSwitchStatus">Cтабилизация</td>
+    <td align="right" id="stabilizationStatus"></td>
+  </tr>
+
+  <tr>
+    <td>Температура стабилизации</td>
+    <td align="right" id="stableColumnTemp"></td>
+  </tr>
+
+   <tr>
+    <td>Дельта</td>
+    <td align="right" id="deltaInfo"></td>
+  </tr>
+
+
+  <tr>
+    <td>Количество стопов (стабилизаций)</td>
+    <td align="right" id="stabilizationCount"></td>
+  </tr>
+ 
+</table>
+<br>
+
+
+<form  id="testRun">
+<table width="40%" frame="box" align="center">
+  <tr><th colspan="2" id="testRunStatus"> Расчет скорости </th></tr>
+  
+  <tr>
+    <td>Время, сек.</td>
+    <td align="right"><input size="5" id="test_run_time"></td>
+  </tr>
+  <tr><th colspan="2"><input align="center" type="submit" value="ОК"></th></tr>
+</table>
+</form>
+
+<form id="collectPerSecond">
+<table width="40%" frame="box" align="center">
+  <tr><th colspan="2"> Запоминаем скорость </th></tr>
+  
+  <tr>
+    <td>Скорость, мл/сек</td>
+    <td align="right"><input size="5" id="pump_speed"></td>
+  </tr>
+  <tr><th colspan="2"><input align="center" type="submit" value="ОК"></th></tr>
+</table>
+</form>
+
+
+<form id="manualRun">
+<table width="40%" frame="box" align="center">
+  <tr><th colspan="2">Отбор</th></tr>
+  
+  <tr>
+    <td>Стабилизация</td>
+    <td align="right"><input align="center" type="checkbox" id="stabSwitch" onchange="this.form.delta.disabled=!( this.checked )"></td>
+  </tr> 
+  
+  <tr>
+    <td>Объем, мл.</td>
+    <td align="right"><input  size="5" id="manualrun_vol"></td>
+  </tr>
+  
+  <tr>
+    <td>Скорость, мл/час</td>
+    <td align="right"><input size="5" id="manualrun_speed"></td>
+  </tr>
+   <tr>
+    <td>Дельта</td>
+    <td align="right"><input size="5" id="delta" disabled="1"></td>
+  </tr>
+  <tr><th colspan="2"><input align="center" type="submit" value="ОК"></th></tr>
+</table>
+</form>
+
+<form id="tempAlarm">
+<table width="40%" frame="box" align="center">
+  <tr><th colspan="2">Пищалка</th></tr>
+  <tr>
+    <td>Сигнал</td>
+    <td align="right" id="Signal"></td>
+  </tr>
+
+</table>
+</form>
+</body>
+<script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.2.1.min.js"></script>
+
+<script>
+var alarmTemp = 70;
+var socket = new WebSocket("ws://192.168.0.222:80/");
+socket.onopen = function() {
+  // $("#connectionStatus").text('<!!!');
+};
+
+socket.onclose = function(event) {
+  if (event.wasClean) {
+  	$("#connectionStatus").text('Соединение закрыто чисто');
+  } else {
+    $("#connectionStatus").text('Обрыв соединения');
+  }
+  $("#connectionStatus").text('Код: ' + event.code + ' причина: ' + event.reason);
+};
+
+socket.onmessage = function(event) {
+
+	var str = (event.data);
+	var msg = str.split(':');
+	var flag = msg.shift();
+	switch (flag){
+		case 'connectionStatus':
+		$("#connectionStatus").text(msg);
+		break;
+		case 'testRun':
+		$("#testRunStatus").text(msg);
+		break;
+		case 'setCollectPerSecond':
+			if (msg[0] > 0){
+				$("#speedSave").text(msg[0]);
+				$("#collectPerSecond").hide(500);
+			}
+		break;
+		case 'manualRun':
+		$("#manualRunStatus").text("Отобрано " + msg[0] + " мл. из " + msg[1] );
+		$("#manualRun").hide(500);
+		$("#testRun").hide(500);
+		if (msg[0] == msg[1]){
+			$("#manualRun").show(500);  
+			$("#testRun").show(500); 
+			$("#manualRunStatus").text('Отбор')
+			var audio = new Audio(); // Создаём новый элемент Audio
+  			audio.src = 'sound.mp3'; // Указываем путь к звуку
+  			audio.autoplay = true; // Автоматически запускаем
+		}
+		break;
+		case 'currentColumnTemp':
+		$("#currentColumnTemp").text(String(msg[0]));
+    $("#Signal").text(alarmTemp);
+    if (msg[0] > alarmTemp){
+      var audio = new Audio(); // Создаём новый элемент Audio
+        audio.src = 'sound.mp3'; // Указываем путь к звуку
+        audio.autoplay = true; // Автоматически запускаем
+    }
+    
+   	break;
+		case 'StabilizationOfColumn':
+		if (msg[0] > 0){
+		$("#manualRun").hide(500);
+		$("#testRun").hide(500);
+		}
+		$("#stabilizationStatus").text(String(msg[0]) + " %");
+		$("#stableColumnTemp").text(String(msg[1]));
+		$("#stabilizationCount").text(String(msg[2]));
+		break;
+		default:
+	}
+
+   
+};
+
+socket.onerror = function(error) {
+ 
+  $("#connectionStatus").text("Ошибка " + error.message);
+};
+
+$(document).ready(function(){
+
+$("#testRun").submit(function() {
+  var testRunTime = $("#test_run_time").val();
+  var str = testRunTime + ' ' + 't';
+  socket.send(str);
+  return false;
+})
+
+$("#collectPerSecond").submit(function() {
+  var pumpSpeed = $("#pump_speed").val();
+  var str = pumpSpeed + ' ' +  's';
+  socket.send(str);
+  return false;
+})
+
+$("#manualRun").submit(function() {
+  var manualrunVol = $("#manualrun_vol").val();
+  var manualrunSpeed = $("#manualrun_speed").val();
+  var delta = $("#delta").val();
+  $("#manualRun").hide(500);
+  $("#testRun").hide(500);
+  $("#manualrunSpeedInfo").text(manualrunSpeed);
+  $("#deltaInfo").text(delta);
+
+  if ($("#stabSwitch").prop('checked')){
+    $("#stabSwitchStatus").text("Стабилизация включена");
+    var str = manualrunVol + ' ' + manualrunSpeed + ' ' + '1' + ' ' + delta + 'm';
+    socket.send(str);
+  }
+
+  else {
+     var str = manualrunVol + ' ' + manualrunSpeed + ' ' + '0' + ' ' + '0' + 'm';
+    socket.send(str);
+    $("#stabSwitchStatus").text("Стабилизация отключена");}
+  return false;
+})
+
+
+})
+
+</script>
+</html>
+
